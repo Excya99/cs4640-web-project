@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Portfolios</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-F3w7mX95PdgyTmZZMECAngseQB83DfGTowi0iMjiWaeVhAn4FJkqJByhZMI3AhiU" crossorigin="anonymous">
+
+  <script src="https://code.jquery.com/jquery-3.6.0.js" integrity="sha256-H+K7U5CnXl1h5ywQfKtSj8PCmoN9aaq30gDh27Xc0jk=" crossorigin="anonymous"></script>
+  <script type="text/javascript">
+    //Retrieve time and format: https://stackoverflow.com/questions/23593052/format-javascript-date-as-yyyy-mm-dd
+    var today = new Date().toLocaleDateString("en-CA"); //en-CA is yyyy-mm-dd format
+    var portfolioValue = 0;
+    var portfolio = [];
+
+    function validate(ticker) {
+      for(var i=0; i<portfolio.length; i++) {
+        if (ticker == portfolio[i]["ticker"]) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    function addStock(stock=null) {
+      // jQuery AJAX API calls
+      var stockTicker = $("#stock-search").val();
+      if (validate(stockTicker)) {
+        $.ajax({
+          url: "?command=API_PreviousClose",
+          type: "GET",
+          data: {"ticker": stockTicker},
+          dataType: "json",
+          success: function(data) {
+            // Get the stock ticker the user searched
+            var newStock = data["results"][0]["T"];
+            if (stock == null) {
+              stock = newStock;
+            }
+            // Setting the new row up
+            var table = document.getElementById("stocks");
+            var newRow = table.insertRow(table.rows.length);
+            // Ticker
+            var newCell = newRow.insertCell(0);
+            newCell.textContent = stock;
+            newCell.style.textAlign = "Center";
+            // Previous closing price (closest to live price, limited by free API)
+            newCell = newRow.insertCell(1);
+            newCell.textContent = data["results"][0]["c"];
+            newCell.style.textAlign = "Center";
+            // Previous low price
+            newCell = newRow.insertCell(2);
+            newCell.textContent = data["results"][0]["l"];
+            newCell.style.textAlign = "Center";
+            // Previous high price
+            newCell = newRow.insertCell(3);
+            newCell.textContent = data["results"][0]["h"];
+            newCell.style.textAlign = "Center";
+            // Delete Row button
+            newCell = newRow.insertCell(4);
+            newCell.innerHTML = "<button class='btn btn-sm btn-danger' onclick='delStock();'>X</button>";
+            // Add to portfolio array, reset value
+            // Note: original_cost tricky, will not work currently 
+            var stockObject = {ticker: data["results"][0]["T"], price: data["results"][0]["c"], low: data["results"][0]["l"], high: data["results"][0]["h"], original_cost: data["results"][0]["c"], acquire_date: today}
+            portfolio.push(stockObject);
+            document.getElementById("stock-search").value = "";
+            portfolioValue+=data["results"][0]["c"];
+            document.getElementById("portfolio_stats").textContent = portfolioValue;
+            // Get current row hovered
+            newRow.onmouseover = function() {
+              table.clickedRow = this.rowIndex;
+            };
+          },
+          error: function() {
+            $("#tickerWarning").text("Invalid ticker symbol");
+          }
+        });
+      }
+      else {
+        $("#tickerWarning").text("Cannot add duplicate stock");
+      }
+    }
+
+    function addStock_loader(stock, closing, low, high, original_cost, acquire_date) {
+      // Setting the new row up
+      var table = document.getElementById("stocks");
+      var newRow = table.insertRow(table.rows.length);
+      // Ticker
+      var newCell = newRow.insertCell(0);
+      newCell.textContent = stock;
+      newCell.style.textAlign = "Center";
+      // Daily High
+      newCell = newRow.insertCell(1);
+      newCell.textContent = closing;
+      newCell.style.textAlign = "Center";
+      // Daily Low
+      newCell = newRow.insertCell(2);
+      newCell.textContent = low;
+      newCell.style.textAlign = "Center";
+      // Closing Price
+      newCell = newRow.insertCell(3);
+      newCell.textContent = high;
+      newCell.style.textAlign = "Center";
+      // Delete Row button
+      newCell = newRow.insertCell(4);
+      newCell.innerHTML = "<button class='btn btn-sm btn-danger' onclick='delStock();'>X</button>";
+      // Add to portfolio array, reset value
+      var stockObject = {ticker: stock, price: closing, low: low, high: high, original_cost: original_cost, acquire_date: acquire_date}
+      portfolio.push(stockObject);
+      // Get current row hovered
+      newRow.onmouseover = function() {
+        table.clickedRow = this.rowIndex;
+      };
+    }
+    
+    function delStock() {
+      var table = document.getElementById("stocks");
+      var copy = [];
+      for (var i=0; i<portfolio.length; i++) {
+        if (table.rows[table.clickedRow].cells[0].textContent != portfolio[i]["ticker"]) {
+          var stockObject = {ticker: portfolio[i]["ticker"], price: portfolio[i]["price"], low: portfolio[i]["low"], high: portfolio[i]["high"], original_cost: portfolio[i]["original_cost"], acquire_date: portfolio[i]["acquire_date"]}
+          copy.push(stockObject);
+        }
+      }
+      portfolio = copy;
+      portfolioValue-=portfolio[i][price];
+      document.getElementById("portfolio_stats").textContent = portfolioValue;
+      table.deleteRow(table.clickedRow);
+    }
+
+    function wipePortfolio() {
+      $("td").remove();
+      portfolioValue = 0;
+      document.getElementById("portfolio_stats").textContent = portfolioValue;
+      portfolio = [];
+      localStorage.setItem("portfolio", JSON.stringify(portfolio));
+    }
+
+    function savePortfolio() {
+      // Save user-selected stocks in the portfolio through localStorage
+      localStorage.setItem("portfolio", JSON.stringify(portfolio));
+    }
+
+    /*
+    Future improvement on loadPortfolio:
+    Needs to also load from database on initial load if data exists rather than only localStorage which does not work for initial load.
+    Problem connects to back-end controller at the time of writing this code
+    */
+    function loadPortfolio() {
+      // Pull up user portfolio information from localStorage
+      var data = JSON.parse(localStorage.getItem("portfolio"));
+      if (data.length != 0) {
+        for(var i=0; i<data.length; i++) {
+            addStock_loader(data[i]["ticker"], data[i]["price"], data[i]["low"], data[i]["high"], data[i]["original_cost"], data[i]["acquire_date"]);
+            portfolioValue+=data["results"][0]["c"];
+            document.getElementById("portfolio_stats").textContent = portfolioValue;
+        }
+        portfolio = data;
+      }
+    }
+
+    function syncPortfolio() {
+      localStorage.setItem("portfolio", JSON.stringify(portfolio));
+      $.ajax({
+        url: "?command=portfolios",
+        type: "POST",
+        dataType: "json",
+        data: {jsonPortfolio: localStorage.getItem("portfolio")}
+      })
+    }
+  </script>
+</head>
+
+<body onunload="savePortfolio();" onload="loadPortfolio();">
+    <!-- Bootstrap header template -->
+    <header class="p-3 bg-dark text-white">
+      <div class="container-fluid">
+        <div class="d-flex flex-wrap align-items-center justify-content-center justify-content-lg-start">
+          <a href="?command=index" class="d-flex align-items-center mb-2 mb-lg-0 text-white text-decoration-none">
+            <img src="templates/styles/icon.png" alt="Generic financial logo" width="40" height="40" class="d-inline-block align-text-top">
+              BFinancials
+          </a>
+          <ul class="nav col-12 col-lg-auto me-lg-auto mb-2 justify-content-center mb-md-0">
+            <li><a href="?command=portfolios" class="nav-link px-2 text-white">Portfolios</a></li>
+            <li><a href="?command=dashboard" class="nav-link px-2 text-white">Dashboard</a></li>
+            <li><a href="?command=market_indexes" class="nav-link px-2 text-white">Market Index</a></li>
+            <li><a href="?command=pricing" class="nav-link px-2 text-white">Pricing</a></li>
+            <li><a href="?command=about" class="nav-link px-2 text-white">About Us</a></li>
+          </ul>
+
+          <div class="text-end">
+            <button class="btn btn-dark"><?=$user["name"]?></button>
+            <a href="?command=logout" class="btn btn-info" role="button">Log out</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <h2 align="center">Portfolio Management</h2>
+    <br>
+    <h4 id="portfolio_stats"></h4>
+    <!-- Portfolio table -->
+    <div class="container">
+      <div class="row">
+        <!-- Form entry for populating the table -->
+        <h3>Add Stocks to Portfolio</h3>
+        <form>
+          <div class="input-group">
+            <input type="search" class="form-control" placeholder="Search using ticker symbol" id="stock-search" name="stock-search" autofocus>
+            <input type="button" class="btn btn-success" id="submit" onclick="addStock();" value="Add Stock">
+          </div>
+          <div id="tickerWarning"></div>
+        </form>
+      </div>
+
+      <div class="row" style="margin-top: 20px;">
+        <div class="col-12">
+          <table id="stocks" class="table table-striped">
+            <tr class = "table-dark">
+              <th style="width: 20%; text-align:center;">Ticker </th>
+              <th style="width: 20%; text-align:center;">Previous Price</th>
+              <th style="width: 20%; text-align:center;">Previous Low</th>
+              <th style="width: 20%; text-align:center;">Previous High</th>
+              <th style="width: 15%; text-align:center;">Remove Stock</th>
+            </tr>
+          </table>
+          <div class="input-group">
+            <button type="button" class="btn btn-info" id="save-portfolio" onclick="savePortfolio();">Save Portfolio</button>
+            <button type="button" class="btn btn-warning" id="sync-portfolio" onclick="syncPortfolio();">Sync Portfolio</button>
+            <button type="button" class="btn btn-danger" id="wipe-portfolio" onclick="wipePortfolio();">Delete Portfolio</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="container">
+        <footer class="d-flex flex-wrap justify-content-between align-items-center py-3 my-4 border-top">
+            <p class="col-md-8 mb-0 text-muted">&copy; 2022 BFinancials. All rights reserved. All investments involve risks, including the possible loss of capital.</p>
+            <ul class="nav col-md-4 justify-content-end">
+                <li class="nav-item"><a href="?command=support" class="nav-link px-2 text-muted">Support</a></li>
+                <li class="nav-item"><a href="?command=terms" class="nav-link px-2 text-muted">Terms & Conditions</a></li>
+                <li class="nav-item"><a href="?command=privacy" class="nav-link px-2 text-muted">Privacy</a></li>
+                <li class="nav-item"><a href="?command=sitemap" class="nav-link px-2 text-muted">Site Map</a></li>
+            </ul>
+        </footer>
+    </div>
+    <!-- Load Javascript -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-/bQdsTh/da6pkI1MST/rWKFNjaCP5gBSY4sEBT38Q/9RBh9AH40zEOg7Hlq2THRZ" crossorigin="anonymous"></script>
+    <script>
+      function addStockValidation() {
+        var ticker = document.getElementById("stock-search");
+        var submit = document.getElementById("submit");
+        var tickerWarning = document.getElementById("tickerWarning");
+        if ((/^[A-Za-z]+$/.test(ticker.value)) && (ticker.value.length <= 5) && (ticker.value.length >= 1)) {
+          ticker.classList.remove("is-invalid");
+          submit.disabled = false;
+          tickerWarning.textContent = "";
+        }
+        else {
+          ticker.classList.add("is-invalid");
+          submit.disabled = true;
+          tickerWarning.textContent = "Invalid ticker symbol";
+        }
+      }
+      //Call anonymous function on stock-search ID
+      document.getElementById("stock-search").addEventListener("keyup", function() {
+        addStockValidation();
+      });
+    </script>
+</body>
+</html>
